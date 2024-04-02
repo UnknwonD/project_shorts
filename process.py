@@ -11,7 +11,7 @@ def resize_video(input_video_path, output_video_path, width=256, height=256):
     
     # 영상 전처리 후 저장을 위한 코드라인
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_video_path, fourcc, 3, (width, height))
+    out = cv2.VideoWriter(output_video_path, fourcc, 3, (width, height), False)
     
     while True:
         ret, frame = video_capture.read()
@@ -19,7 +19,6 @@ def resize_video(input_video_path, output_video_path, width=256, height=256):
             break
         
         # 영상 크기 조정
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         resized_frame = cv2.resize(frame, (width, height))
         
         # 조정된 영상 쓰기
