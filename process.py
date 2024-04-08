@@ -1,12 +1,12 @@
 import cv2
 
-def compress_video(input_video_path, output_video_path, width=256, height=256, frame_sz=3):
+def compress_video(input_video_path, output_video_path, width=256, height=256, frame_rate=3):
     # 영상 읽기
     video_capture = cv2.VideoCapture(input_video_path)
 
     # 영상 전처리 후 저장을 위한 코드라인
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_video_path, fourcc, frame_sz, (width, height), False)
+    out = cv2.VideoWriter(output_video_path, fourcc, frame_rate, (width, height), False)
     
     while True:
         ret, frame = video_capture.read()
@@ -16,13 +16,17 @@ def compress_video(input_video_path, output_video_path, width=256, height=256, f
         # 영상 크기 조정
         resized_frame = cv2.resize(frame, (width, height))
         
+        # 흑백 영상으로 변환
+        gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
+        
         # 조정된 영상 쓰기
-        out.write(resized_frame)
+        out.write(gray_frame)
     
     # 종료 및 리소스 해제
     video_capture.release()
     out.release()
     cv2.destroyAllWindows()
+
 
 
 
