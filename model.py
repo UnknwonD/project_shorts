@@ -28,15 +28,14 @@ class CNNLSTM(Model):
         
         return x
 
-# Assuming each video clip has 3 frames of size 256x256 with 1 channel (grayscale)
-input_shape = (None, 3, 256, 256, 1)  # The 'None' dimension is for the batch size.
+input_shape = (None, 3, 256, 256, 1)
 model = CNNLSTM(input_shape=input_shape)
 
 # Compile the model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # Model summary
-model.build(input_shape=input_shape)  # You need to build the model by specifying the input shape
+model.build(input_shape=input_shape) 
 
 fake_input = tf.random.normal([5, 3, 256, 256, 1])
 _ = model(fake_input)
