@@ -4,3 +4,4 @@ processed
 New_sample
 .DS_Store
 test.npy
+__pycache__
