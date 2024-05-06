@@ -38,9 +38,9 @@ class SelfAttention(tf.keras.layers.Layer):
 
         return y, att_weights
 
-class VASNet(tf.keras.Model):
+class Transformer(tf.keras.Model):
     def __init__(self):
-        super(VASNet, self).__init__()
+        super(Transformer, self).__init__()
         self.m = 1024
         self.att = SelfAttention(input_size=self.m, output_size=self.m)
         self.ka = tf.keras.layers.Dense(1024)
