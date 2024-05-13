@@ -6,3 +6,4 @@ New_sample
 test.npy
 __pycache__
 audio.wav
+*.h5
