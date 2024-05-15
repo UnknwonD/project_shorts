@@ -7,3 +7,5 @@ test.npy
 __pycache__
 audio.wav
 *.h5
+*.wav
+*.mp4
