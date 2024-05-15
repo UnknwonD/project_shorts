@@ -25,6 +25,8 @@ def extract_audio(video_path, audio_path):
     # 파일 닫기
     video_clip.close()
     
+    return audio_path
+    
     
 def preprocess_audio(audio_path, sample_rate=22050, n_fft=2048, hop_length=512, n_mels=130, segment_duration=3):
     # 오디오 파일 로드

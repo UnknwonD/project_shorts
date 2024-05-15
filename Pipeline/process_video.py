@@ -4,14 +4,13 @@ import numpy as np
 import json
 from tqdm import tqdm
 
-def preprocess_video_every_3_seconds(video_path:str, frame_size:tuple, block_nums:int, frame_rate=3):
+def preprocess_video_every_3_seconds(video_path:str, frame_size:tuple, frame_rate=3):
     """
     Extracts frames every 3 seconds from a video file, resizing them to frame_size and converting to grayscale.
     
     Args:
     video_path (str): Path to the video file.
     frame_size (tuple): Size (height, width) to resize frames.
-    block_nums (int) : Total count for three-seconds-blocks
     frame_rate (int): Number of frames to extract per second within the 3-second window.
 
     Returns:
@@ -40,33 +39,6 @@ def preprocess_video_every_3_seconds(video_path:str, frame_size:tuple, block_num
         
         if len(frames) >= frame_rate : 
             sequences.append(np.array(frames[:frame_rate * 3]))  # 모든 frame이 3초단위로 들어갈 수 있도록 제어
-        
-        if len(sequences) > block_nums:
-            break
 
     vidcap.release()
     return np.array(sequences[:-1])
-
-
-def parse_annotations(annotations:list):
-    """
-    Extracts Every Annotation from json label file
-    
-    Args:
-    annotations(List): List of Dictionary for annotations label with highlight and represent
-
-    Returns:
-    Dict: Whether each block is Highlight or not
-    """
-    highlight_map = {}
-    
-    for annot in annotations:
-        block_num = annot['highlight']
-        for num in block_num:
-            highlight_map[num] = 1
-            
-    ret = [0] * len(highlight_map)
-    for i, item in enumerate(highlight_map.items()):
-        ret[item] = 1
-                
-    return highlight_map
