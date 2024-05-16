@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 
 from process_audio import extract_audio, preprocess_audio
 from process_video import preprocess_video_every_3_seconds
@@ -22,7 +23,6 @@ def pipeline_video(video_path:str):
     
     audio = extract_audio(video_path, './test.wav')
     audio = preprocess_audio(audio)
-    
 
     video = preprocess_video_every_3_seconds(video_path, (256, 256), 3)
 
@@ -32,7 +32,8 @@ def pipeline_video(video_path:str):
     # 1) 비디오 모델 load
     # 2) 오디오 모델 load
 
-    video_model = load_model("video_model.h5") # input으로 하나씩 넣어서 output을 append 하는 거로 수정할 것
+    video_model = load_model("video_3D_model.h5")
+    # video_model = load_model("video_model.h5")
     audio_model = load_model("audio_model_resnet.h5")
 
     ####### 4. 모델 추론
@@ -45,8 +46,6 @@ def pipeline_video(video_path:str):
     ####### 5. Ensemble
     ##
     ensemble_output = np.mean([video_output, audio_output], axis=0)
-    print("##################audio######################")
-    print(audio_output)
     print("##################video######################")
     print(video_output)
     print("#############################################")
@@ -57,4 +56,4 @@ def pipeline_video(video_path:str):
 
 test_data = pipeline_video(video_path)
 
-print(len(test_data))
+print(test_data)
