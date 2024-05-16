@@ -1,82 +1,120 @@
 import os
-import json
+import cv2
 import numpy as np
-from tqdm import tqdm
 
-from process_audio import extract_audio, preprocess_audio
-from process_video import preprocess_video_every_3_seconds
+import librosa 
+import librosa.display as dsp
+from IPython.display import Audio
+from moviepy.editor import VideoFileClip
+from tensorflow.keras.models import load_model
 
-video_length = ['2~5분']
 
-new_video_data = []
-output_json_path = f'processed/label/processed_video_data.json'
 
-for i, leng in enumerate(video_length):
+def extract_audio(video_path, audio_path):
+    '''
+    1. 무비 파일 경로\n
+    video_path = 'data/원천데이터/2~5분/test.mp4'
+    audio_path = 'audio.wav'
 
-    output_video_dir = 'processed/video/'
-    output_wav_dir = 'processed/wav/'
-    output_audio_dir = 'processed/audio/'
+    2. 오디오 추출\n
+    extract_audio(video_path, audio_path)
+    '''
 
-    json_path = f'data/라벨링데이터/video_summary_validation_data({leng}).json'
-    video_path = f'data/원천데이터/{leng}/'
-
-    with open(json_path, 'r', encoding='utf-8') as f:
-        label_data = json.load(f)
-
-    if i == 0:
-        video_idx = 1
-
-    for item in tqdm(label_data):
-        input_video_name = item['filename'] + '.mp4'
-        input_video_path = os.path.join(video_path, input_video_name)
-
-        output_video_name = f"processed_video_{video_idx}.npy"
-        output_video_path = os.path.join(output_video_dir, output_video_name)
+    video_clip = VideoFileClip(video_path)
+    audio_clip = video_clip.audio
+    audio_clip.write_audiofile(audio_path, verbose=False, logger=None)
+    video_clip.close()
+    
+    return audio_path
+    
+    
+def preprocess_audio(audio_path, sample_rate=22050, n_fft=2048, hop_length=512, n_mels=130, segment_duration=3):
+    audio, sr = librosa.load(audio_path, sr=sample_rate)
+    
+    segment_length = int(sr * segment_duration)
+    
+    segments = []
+    num_segments = len(audio) // segment_length
+    for i in range(num_segments):
+        start_idx = i * segment_length
+        end_idx = start_idx + segment_length
+        segment = audio[start_idx:end_idx]
         
-        output_wav_name = f"processed_video_{video_idx}.wav"
-        output_wav_path =  os.path.join(output_wav_dir, output_wav_name)
-
-        output_audio_name = f"processed_audio_{video_idx}.npy"
-        output_audio_path =  os.path.join(output_audio_dir, output_audio_name)
-
-        if not os.path.exists(input_video_path):
-            print(f"Not Found : {input_video_path}")
-            continue
+        mel_spectrogram = librosa.feature.melspectrogram(y=segment, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)
+        mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)
+        
+        segments.append(mel_spectrogram_db)
+    
+    return np.array(segments)
 
 
-        ######################################
-        # 오디오 데이터 분리 후 저장
-        extract_audio(input_video_path, output_wav_path) # mp4에서 오디오(wav) 추출 및 저장
+def preprocess_video_every_3_seconds(video_path:str, frame_size:tuple, frame_rate=3):
+    """
+    Extracts frames every 3 seconds from a video file, resizing them to frame_size and converting to grayscale.
+    
+    Args:
+    video_path (str): Path to the video file.
+    frame_size (tuple): Size (height, width) to resize frames.
+    frame_rate (int): Number of frames to extract per second within the 3-second window.
 
-        ######################################
-        # 영상 전처리 진행 및 저장
-        blocks_num = item["three_secs"][-1] + 1
-        # print(item)
-        annotations = item['annots']
+    Returns:
+    List[numpy.ndarray]: List of sequences, where each sequence is a numpy array of shape (num_frames, height, width, 1).
+    """
 
-        output = preprocess_video_every_3_seconds(input_video_path, (256, 256), blocks_num)
-        np.save(output_video_path, output)
+    vidcap = cv2.VideoCapture(video_path)
+    fps = vidcap.get(cv2.CAP_PROP_FPS)
+    interval = int(fps * 3)
 
-        ######################################
-        # 오디오 전처리 및 학습 가능 파일로 저장
-        # 저장 및 동기화 시간을 고려하여 영상 전처리 후 마지막 순서에 배치
-        mel_spectrogram_segments = preprocess_audio(output_wav_path)
-        np.save(output_audio_path, mel_spectrogram_segments)
+    sequences = []
+    while True:
+        frames = []
+        for _ in range(interval):
+            success, frame = vidcap.read()
+            if not success:
+                break
+            frame = cv2.resize(frame, frame_size, interpolation=cv2.INTER_AREA)
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray_frame = np.expand_dims(gray_frame, axis=-1)
+            gray_frame = gray_frame.astype(np.float32) / 255.0 
+            frames.append(gray_frame)
+
+        if len(frames) == 0:
+            break
+        
+        if len(frames) >= frame_rate : 
+            sequences.append(np.array(frames[:frame_rate * 3]))
+
+    vidcap.release()
+    return np.array(sequences[:-1])
 
 
-        category = item["category"]
+def pipeline_video(video_path:str):
 
-        item['filename'] = output_video_name
-        item['category'] = category.encode('utf-8').decode()
-        item['video_path'] = output_video_path
-        item['audio_path'] = output_audio_path
-        item['quality'] = '256 256' # 추 후에 데이터 사용할 때, split으로 사용할 수 있게 띄워쓰기로 구분
+    if not os.path.exists(video_path):
+        print(f"Video Not Found : {video_path}")
+        return
+    
+    audio = extract_audio(video_path, './test.wav')
+    audio = preprocess_audio(audio)
 
-        video_idx += 1
-        new_video_data.append(item)
+    video = preprocess_video_every_3_seconds(video_path, (256, 256), 3)
 
-# 전처리된 데이터에 대해 라벨을 새로 저장해줌
-with open(output_json_path, 'w', encoding='utf-8') as f:
-    json.dump(new_video_data, f, ensure_ascii=False, indent=2)
+    print(len(video))
+    print(len(audio))
 
-print(f"Process Finish :: {leng}")
+    video_model = load_model("video_3D_model.h5")
+    # video_model = load_model("video_model.h5")
+    audio_model = load_model("audio_model_resnet.h5")
+
+    video_output = video_model.predict(video)
+    audio_output = audio_model.predict(audio)
+
+    ensemble_output = np.mean([video_output, audio_output], axis=0)
+    final_predictions = np.argmax(ensemble_output, axis=1)
+    
+    return final_predictions
+
+video_path = "Pipeline/test.mp4"
+test_data = pipeline_video(video_path)
+
+print(test_data)
