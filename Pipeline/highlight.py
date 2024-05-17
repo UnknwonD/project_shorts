@@ -46,6 +46,9 @@ def pipeline_video(video_path:str):
     ####### 5. Ensemble
     ##
     ensemble_output = np.mean([video_output, audio_output], axis=0)
+    print("##################audio######################")
+    print(audio_output)
+    print("#############################################")
     print("##################video######################")
     print(video_output)
     print("#############################################")
