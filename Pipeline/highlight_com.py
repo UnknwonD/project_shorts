@@ -8,8 +8,6 @@ from process_video import preprocess_video_every_3_seconds
 from tensorflow.keras.models import load_model
 
 
-video_path = "Pipeline/input.mp4"
-
 import numpy as np
 
 def ensemble_predictions(model1, model2, input_frame, input_audio):
@@ -81,6 +79,7 @@ def pipeline_video(video_path:str):
     ####### 6. Return
     return final_prediction
 
+video_path = "Pipeline/input.mp4"
 test_data = pipeline_video(video_path)
 
 print(test_data)
