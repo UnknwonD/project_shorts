@@ -42,7 +42,7 @@ def pipeline_video(video_path:str):
     ####### 6. Return
     return final_predictions
 
-video_path = "pang.mp4"
+video_path = "full_Video.mp4"
 test_data = pipeline_video(video_path)
 
 print(test_data)
