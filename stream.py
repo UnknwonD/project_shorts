@@ -4,6 +4,7 @@ import streamlit as st
 import altair as alt
 import tempfile
 import base64
+import cv2
 
 from process_model import pipeline_video
 
@@ -104,6 +105,81 @@ def compute_ensemble(video_data, audio_data, video_weight, audio_weight, thresho
     return ensemble_labels, ensemble_scores
 
 
+def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold):
+    # Ensure both arrays have the same length by truncating to the shortest length
+    min_length = min(video_data.shape[0], audio_data.shape[0])
+    video_data = video_data[:min_length]
+    audio_data = audio_data[:min_length]
+    
+    # Compute ensemble scores
+    ensemble_scores = (video_data * video_weight + audio_data * audio_weight) / (video_weight + audio_weight)
+    ensemble_labels = ensemble_scores.argmax(axis=1)
+
+    # Apply threshold to label "2"
+    high_confidence_twos = ensemble_scores[:, 2] >= threshold
+    ensemble_labels[high_confidence_twos] = 2
+    
+    # Format output as (i, label, score)
+    output = [(i, ensemble_labels[i], ensemble_scores[i]) for i in range(min_length)]
+    
+    return output
+
+
+import cv2
+import numpy as np
+
+def preprocess_shorts(video_path: str, label: list, output_path: str):
+    vidcap = cv2.VideoCapture(video_path)
+    
+    if not vidcap.isOpened():
+        print("Error: Could not open video.")
+        return
+    
+    fps = vidcap.get(cv2.CAP_PROP_FPS)
+    interval = int(fps * 3)  # 3초 단위로 분리
+    sequences = []
+
+    for lbl in label:
+        index = lbl[0]
+        start_frame = index * interval
+        print(f"Processing index {index}, start_frame {start_frame}")
+        
+        current_frame = 0
+        frames = []
+
+        # Read and discard frames until we reach the start_frame
+        while current_frame < start_frame:
+            success, frame = vidcap.read()
+            if not success:
+                print("Warning: Could not read frame. Ending early.")
+                break
+            current_frame += 1
+
+        # Read frames for the current segment
+        for _ in range(interval):
+            success, frame = vidcap.read()
+            if not success:
+                print("Warning: Could not read frame. Ending segment early.")
+                break
+            frames.append(frame)
+        
+        if len(frames) == interval:
+            sequences.extend(frames)
+    
+    if sequences:
+        height, width, layers = sequences[0].shape
+        size = (width, height)
+        out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, size)
+
+        for frame in sequences:
+            out.write(frame)
+        
+        out.release()
+    
+    vidcap.release()
+
+
+
 # Streamlit app
 st.set_page_config(page_title='Video Highlight Trends', layout='wide')
 st.title('Video Highlight Trends')
@@ -120,7 +196,7 @@ if 'model_selection' not in st.session_state:
 
 # Sidebar for navigation
 st.sidebar.title('Navigation')
-page = st.sidebar.radio('Go to', ['Main', 'Confirmed Labels', 'Ensemble'])
+page = st.sidebar.selectbox('Go to', ['Main', 'Confirmed Labels', 'Ensemble', 'Output'])
 
 st.session_state.page = page
 
@@ -133,11 +209,10 @@ if uploaded_file is not None:
         temp_file.write(uploaded_file.getbuffer())
         video_path = temp_file.name
 
-    st.write("Processing video, please wait...")
-
     # Process the video and audio data if not already processed
     if st.session_state.new_video_data is None and st.session_state.new_audio_data is None:
         new_video_data, new_audio_data = process_video_data(video_path)
+        
         st.session_state.new_video_data = new_video_data
         st.session_state.new_audio_data = new_audio_data
     else:
@@ -242,9 +317,9 @@ if uploaded_file is not None:
             # Display the confirmed labels chart
             st.altair_chart(confirmed_labels_chart, use_container_width=True)
     
-    elif st.session_state.page == 'Ensemble':
+    elif st.session_state.page == 'Output':
         # Ensemble Page
-        st.header('Ensemble Model Visualization')
+        st.header('Model Output Visualization')
 
         # Sidebar for ensemble parameters
         st.sidebar.subheader('Ensemble Parameters')
@@ -273,3 +348,30 @@ if uploaded_file is not None:
 
         # Display the ensemble labels chart
         st.altair_chart(ensemble_labels_chart, use_container_width=True)
+        
+    elif st.session_state.page == 'Ensemble':
+        # Ensemble Page
+        st.header('Ensemble Model Visualization')
+
+        # Sidebar for ensemble parameters
+        st.sidebar.subheader('Ensemble Parameters')
+        video_weight = st.sidebar.slider('Video Model Weight', 0.0, 1.0, 0.5)
+        audio_weight = st.sidebar.slider('Audio Model Weight', 0.0, 1.0, 0.5)
+        threshold = st.sidebar.slider('Threshold for Label 2', 0.0, 1.0, 0.5)
+        compute_button = st.sidebar.button('Submit')
+
+        if compute_button:
+            # Assuming `new_video_data` and `new_audio_data` are available
+            sorted_data = compute_ensemble(new_video_data, new_audio_data, video_weight, audio_weight, threshold)
+            preprocess_shorts(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
+            
+            # Display the results
+            st.subheader('Ensemble Results')
+            for data in sorted_data:
+                st.write(f"Index: {data[0]}, Label: {data[1]}, Scores: {data[2]}")
+
+            # Assuming the video path is correctly generated and saved
+            video_file = "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4"
+            st.video(video_file)
+
+        
