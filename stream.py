@@ -4,7 +4,9 @@ import streamlit as st
 import altair as alt
 import tempfile
 import base64
+import time
 import cv2
+import os
 
 from process_model import pipeline_video
 
@@ -32,62 +34,6 @@ def process_video_data(video_path):
 
     return new_video_data, new_audio_data
 
-def video_with_progress(video_path, importance_scores):
-    # Display video
-    video_file = open(video_path, 'rb')
-    video_bytes = video_file.read()
-    video_url = f"data:video/mp4;base64,{base64.b64encode(video_bytes).decode()}"
-
-    # Custom CSS for the video container
-    css_code = f"""
-    <style>
-    .video-container {{
-        position: relative;
-        width: 700px;
-        margin: 0 auto;
-    }}
-    .video-slider {{
-        position: absolute;
-        top: -20px;
-        width: 100%;
-        z-index: 1;
-        height: 10px;
-        opacity: 0.5;
-    }}
-    </style>
-    """
-
-    # JavaScript to sync slider and video
-    js_code = f"""
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {{
-        const video = document.getElementById("video");
-        const slider = document.getElementById("slider");
-
-        slider.addEventListener("input", function() {{
-            video.currentTime = (this.value / 100) * video.duration;
-        }});
-
-        video.addEventListener("timeupdate", function() {{
-            slider.value = (video.currentTime / video.duration) * 100;
-        }});
-    }});
-    </script>
-    """
-
-    st.markdown(css_code, unsafe_allow_html=True)
-    st.markdown(js_code, unsafe_allow_html=True)
-
-    st.markdown(f"""
-        <div class="video-container">
-            <video id="video" width="700" controls>
-                <source src="{video_url}" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
-            <input type="range" id="slider" class="video-slider" min="0" max="100" step="0.1">
-        </div>
-    """, unsafe_allow_html=True)
-
 def compute_ensemble(video_data, audio_data, video_weight, audio_weight, threshold):
     # Ensure both arrays have the same length by truncating to the shortest length
     min_length = min(video_data.shape[0], audio_data.shape[0])
@@ -101,6 +47,7 @@ def compute_ensemble(video_data, audio_data, video_weight, audio_weight, thresho
     # Apply threshold to label "2"
     high_confidence_twos = ensemble_scores[:, 2] >= threshold
     ensemble_labels[high_confidence_twos] = 2
+    
     
     return ensemble_labels, ensemble_scores
 
@@ -120,13 +67,13 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     ensemble_labels[high_confidence_twos] = 2
     
     # Format output as (i, label, score)
-    output = [(i, ensemble_labels[i], ensemble_scores[i]) for i in range(min_length)]
+    output = [(i, ensemble_labels[i], max(ensemble_scores[i])) for i in range(min_length)]
     
-    return output
+    sorted_data = sorted(output, key=lambda x: (x[1], x[2]), reverse=True)
+    sorted_data = sorted(sorted_data[:5], key=lambda x: x[0])
+    
+    return sorted_data
 
-
-import cv2
-import numpy as np
 
 def preprocess_shorts(video_path: str, label: list, output_path: str):
     vidcap = cv2.VideoCapture(video_path)
@@ -136,26 +83,33 @@ def preprocess_shorts(video_path: str, label: list, output_path: str):
         return
     
     fps = vidcap.get(cv2.CAP_PROP_FPS)
+    if fps == 0:
+        print("Error: Could not retrieve FPS from video.")
+        vidcap.release()
+        return
+    
     interval = int(fps * 3)  # 3초 단위로 분리
+    total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
     sequences = []
 
     for lbl in label:
         index = lbl[0]
-        start_frame = index * interval
-        print(f"Processing index {index}, start_frame {start_frame}")
+        start_frame = float(index * interval)
         
-        current_frame = 0
+        print(f"Processing index {index}, start_frame {start_frame}")
+
+        if start_frame >= total_frames:
+            print(f"Warning: start_frame {start_frame} is out of bounds for video with {total_frames} frames.")
+            continue
+        
+        vidcap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        
+        current_pos = vidcap.get(cv2.CAP_PROP_POS_FRAMES)
+        if current_pos != start_frame:
+            print(f"Error: Could not set video to start frame {start_frame}. Current position is {current_pos}.")
+            continue
+
         frames = []
-
-        # Read and discard frames until we reach the start_frame
-        while current_frame < start_frame:
-            success, frame = vidcap.read()
-            if not success:
-                print("Warning: Could not read frame. Ending early.")
-                break
-            current_frame += 1
-
-        # Read frames for the current segment
         for _ in range(interval):
             success, frame = vidcap.read()
             if not success:
@@ -177,6 +131,8 @@ def preprocess_shorts(video_path: str, label: list, output_path: str):
         out.release()
     
     vidcap.release()
+
+
 
 
 
@@ -270,9 +226,6 @@ if uploaded_file is not None:
             # Display the chart in Streamlit
             st.altair_chart(chart, use_container_width=True)
 
-        # Display video with progress
-        video_with_progress(video_path, importance_scores)
-
     elif st.session_state.page == 'Confirmed Labels':
         # Confirmed Labels Page
         st.header('Confirmed Labels Visualization')
@@ -362,7 +315,8 @@ if uploaded_file is not None:
 
         if compute_button:
             # Assuming `new_video_data` and `new_audio_data` are available
-            sorted_data = compute_ensemble(new_video_data, new_audio_data, video_weight, audio_weight, threshold)
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold)
+            output_path = "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4"
             preprocess_shorts(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
             
             # Display the results
@@ -370,8 +324,18 @@ if uploaded_file is not None:
             for data in sorted_data:
                 st.write(f"Index: {data[0]}, Label: {data[1]}, Scores: {data[2]}")
 
-            # Assuming the video path is correctly generated and saved
-            video_file = "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4"
-            st.video(video_file)
+            # Ensure the video file is fully written before trying to display it
+            time.sleep(4)  # Adding a short delay to ensure the file is written
+            
+            # Check if the file exists
+            if os.path.exists(output_path):
+                st.subheader('Ensemble Results')
+                for data in sorted_data:
+                    st.write(f"Index: {data[0]}, Label: {data[1]}, Scores: {data[2]}")
+                
+                # Display the video
+                st.video(output_path)
+            else:
+                st.error("Error: Video file was not created successfully.")
 
         
