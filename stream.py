@@ -52,11 +52,14 @@ def compute_ensemble(video_data, audio_data, video_weight, audio_weight, thresho
     return ensemble_labels, ensemble_scores
 
 
-def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold):
+def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold, ratio):
+    
     # Ensure both arrays have the same length by truncating to the shortest length
     min_length = min(video_data.shape[0], audio_data.shape[0])
     video_data = video_data[:min_length]
     audio_data = audio_data[:min_length]
+    
+    video_length = int(min_length * ratio)
     
     # Compute ensemble scores
     ensemble_scores = (video_data * video_weight + audio_data * audio_weight) / (video_weight + audio_weight)
@@ -70,12 +73,53 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     output = [(i, ensemble_labels[i], max(ensemble_scores[i])) for i in range(min_length)]
     
     sorted_data = sorted(output, key=lambda x: (x[1], x[2]), reverse=True)
-    sorted_data = sorted(sorted_data[:5], key=lambda x: x[0])
+    sorted_data = sorted(sorted_data[:video_length], key=lambda x: x[0])
     
     return sorted_data
 
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 def preprocess_shorts(video_path: str, label: list, output_path: str):
+    try:
+        clip = VideoFileClip(video_path)
+    except IOError:
+        print("Error: Could not open video.")
+        return
+
+    fps = clip.fps
+    if fps is None:
+        print("Error: Could not retrieve FPS from video.")
+        return
+
+    interval = 3  # 3 seconds interval
+    sequences = []
+
+    for lbl in label:
+        index = lbl[0]
+        start_time = index * interval
+        end_time = start_time + interval
+
+        if start_time >= clip.duration:
+            print(f"Warning: start_time {start_time} is out of bounds for video with duration {clip.duration} seconds.")
+            continue
+
+        subclip = clip.subclip(start_time, min(end_time, clip.duration))
+        sequences.append(subclip)
+
+    if sequences:
+        final_clip = concatenate_videoclips(sequences)
+        try:
+            final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
+        except TypeError as e:
+            print(f"TypeError encountered: {e}")
+            print(f"Final clip duration: {final_clip.duration}")
+            print(f"Final clip fps: {final_clip.fps}")
+    else:
+        print("No valid sequences to process.")
+
+    clip.close()
+
+def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str):
     vidcap = cv2.VideoCapture(video_path)
     
     if not vidcap.isOpened():
@@ -311,18 +355,23 @@ if uploaded_file is not None:
         video_weight = st.sidebar.slider('Video Model Weight', 0.0, 1.0, 0.5)
         audio_weight = st.sidebar.slider('Audio Model Weight', 0.0, 1.0, 0.5)
         threshold = st.sidebar.slider('Threshold for Label 2', 0.0, 1.0, 0.5)
+        video_length = st.sidebar.slider("Video Length Ratio", 0.0, 1.0, 0.5)
+        with_audio  = st.sidebar.checkbox("Preceed Video with Audio")
+        
+        if with_audio:
+            st.markdown("<span style='color:red;'>Warning :: It will Take a Long Time !!</span>", unsafe_allow_html=True)
+            
         compute_button = st.sidebar.button('Submit')
 
         if compute_button:
             # Assuming `new_video_data` and `new_audio_data` are available
-            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold)
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
             output_path = "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4"
-            preprocess_shorts(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
             
-            # Display the results
-            st.subheader('Ensemble Results')
-            for data in sorted_data:
-                st.write(f"Index: {data[0]}, Label: {data[1]}, Scores: {data[2]}")
+            if with_audio:
+                preprocess_shorts(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
+            else:
+                preprocess_shorts_only_frame(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
 
             # Ensure the video file is fully written before trying to display it
             time.sleep(4)  # Adding a short delay to ensure the file is written
