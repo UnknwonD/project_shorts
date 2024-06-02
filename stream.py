@@ -5,10 +5,12 @@ import altair as alt
 import tempfile
 import base64
 import time
+from datetime import datetime
 import cv2
 import os
 
 from process_model import pipeline_video
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 def get_values_and_indices(arr):
     result = []
@@ -59,7 +61,8 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     video_data = video_data[:min_length]
     audio_data = audio_data[:min_length]
     
-    video_length = int(min_length * ratio)
+    # video_length = int(min_length * ratio)
+    video_length = (ratio // 3) # 가장 큰 3초 단위로 정리
     
     # Compute ensemble scores
     ensemble_scores = (video_data * video_weight + audio_data * audio_weight) / (video_weight + audio_weight)
@@ -77,48 +80,34 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     
     return sorted_data
 
-from moviepy.editor import VideoFileClip, concatenate_videoclips
 
-def preprocess_shorts(video_path: str, label: list, output_path: str):
-    try:
-        clip = VideoFileClip(video_path)
-    except IOError:
-        print("Error: Could not open video.")
-        return
 
-    fps = clip.fps
-    if fps is None:
-        print("Error: Could not retrieve FPS from video.")
-        return
+@st.cache_data
+def make_clip_video(video_path, output_video, labels):
+    # Load the video
+    video = VideoFileClip(video_path)
 
-    interval = 3  # 3 seconds interval
-    sequences = []
+    # Define the segments to cut (start and end times in seconds)
+    segments = []
+    
+    for label in labels:
+        segments.append((label[0] * 3, label[0] * 3 + 3))
+    print(segments)
+    
+    # Extract the segments with start seconds and end seconds like (0, 3), (3, 6)
+    clips = [video.subclip(start, end) for start, end in segments]
 
-    for lbl in label:
-        index = lbl[0]
-        start_time = index * interval
-        end_time = start_time + interval
+    print(clips)
+    # # Concatenate the segments into one video
+    final_clip = concatenate_videoclips(clips)
+    print(final_clip)
 
-        if start_time >= clip.duration:
-            print(f"Warning: start_time {start_time} is out of bounds for video with duration {clip.duration} seconds.")
-            continue
+    # # Export the final video
+    final_clip.write_videofile(output_video)
+    
+    
 
-        subclip = clip.subclip(start_time, min(end_time, clip.duration))
-        sequences.append(subclip)
-
-    if sequences:
-        final_clip = concatenate_videoclips(sequences)
-        try:
-            final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
-        except TypeError as e:
-            print(f"TypeError encountered: {e}")
-            print(f"Final clip duration: {final_clip.duration}")
-            print(f"Final clip fps: {final_clip.fps}")
-    else:
-        print("No valid sequences to process.")
-
-    clip.close()
-
+@st.cache_data
 def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str):
     vidcap = cv2.VideoCapture(video_path)
     
@@ -176,10 +165,6 @@ def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str)
     
     vidcap.release()
 
-
-
-
-
 # Streamlit app
 st.set_page_config(page_title='Video Highlight Trends', layout='wide')
 st.title('Video Highlight Trends')
@@ -196,7 +181,7 @@ if 'model_selection' not in st.session_state:
 
 # Sidebar for navigation
 st.sidebar.title('Navigation')
-page = st.sidebar.selectbox('Go to', ['Main', 'Confirmed Labels', 'Ensemble', 'Output'])
+page = st.sidebar.selectbox('Go to', ['Main', 'Statistics', 'Confirmed Labels', 'Ensemble Test', 'Output'])
 
 st.session_state.page = page
 
@@ -224,6 +209,53 @@ if uploaded_file is not None:
 
     if st.session_state.page == 'Main':
         # Main Page
+        ## 사용자가 직접 사용할 수 있는 사이트
+        values_and_indices1 = get_values_and_indices(new_video_data)
+        values_and_indices2 = get_values_and_indices(new_audio_data)
+
+        # Convert to DataFrame for easier plotting
+        data1 = pd.DataFrame(values_and_indices1, columns=['Block Num', 'Highlight Label', 'Score'])
+        data2 = pd.DataFrame(values_and_indices2, columns=['Block Num', 'Highlight Label', 'Score'])
+
+        # Layout with columns for better organization
+        col1, col2 = st.columns([2, 3])
+
+        with col1:
+            st.header('Dataset Selection')
+            
+            # Sidebar for dataset selection
+            dataset = st.selectbox('Select Dataset', ['Video', 'Audio'])
+
+            # Select the appropriate dataset
+            if dataset == 'Video':
+                data = data1
+            else:
+                data = data2
+
+            # Filter data controls below the graph
+            unique_column_indices = data['Highlight Label'].unique()
+            selected_column_indices = st.multiselect('Select Column Index', unique_column_indices, default=unique_column_indices)
+
+        with col2:
+            st.header('Highlight Trends')
+
+            # Filter data based on selection
+            filtered_data = data[(data['Highlight Label'].isin(selected_column_indices))]
+
+            # Create Altair chart
+            chart = alt.Chart(filtered_data).mark_line(point=alt.OverlayMarkDef(color="red")).encode(
+                x='Block Num:Q',
+                y='Score:Q',
+                tooltip=['Block Num', 'Highlight Label', 'Score'],
+                color='Highlight Label:N'
+            ).properties(
+                title='Highlight Trends'
+            ).interactive()
+
+            # Display the chart in Streamlit
+            st.altair_chart(chart, use_container_width=True)
+            
+    elif st.session_state.page == 'Statistics':
         # Process both datasets
         values_and_indices1 = get_values_and_indices(new_video_data)
         values_and_indices2 = get_values_and_indices(new_audio_data)
@@ -314,7 +346,7 @@ if uploaded_file is not None:
             # Display the confirmed labels chart
             st.altair_chart(confirmed_labels_chart, use_container_width=True)
     
-    elif st.session_state.page == 'Output':
+    elif st.session_state.page == 'Ensemble Test':
         # Ensemble Page
         st.header('Model Output Visualization')
 
@@ -346,7 +378,7 @@ if uploaded_file is not None:
         # Display the ensemble labels chart
         st.altair_chart(ensemble_labels_chart, use_container_width=True)
         
-    elif st.session_state.page == 'Ensemble':
+    elif st.session_state.page == 'Output':
         # Ensemble Page
         st.header('Ensemble Model Visualization')
 
@@ -355,26 +387,27 @@ if uploaded_file is not None:
         video_weight = st.sidebar.slider('Video Model Weight', 0.0, 1.0, 0.5)
         audio_weight = st.sidebar.slider('Audio Model Weight', 0.0, 1.0, 0.5)
         threshold = st.sidebar.slider('Threshold for Label 2', 0.0, 1.0, 0.5)
-        video_length = st.sidebar.slider("Video Length Ratio", 0.0, 1.0, 0.5)
+        video_length = st.sidebar.number_input("Video Length Ratio", min_value=3, step = 3)
         with_audio  = st.sidebar.checkbox("Preceed Video with Audio")
         
         if with_audio:
-            st.markdown("<span style='color:red;'>Warning :: It will Take a Long Time !!</span>", unsafe_allow_html=True)
+            st.markdown("<span style='color:red;'>Warning :: It will Takes a Long Time !!</span>", unsafe_allow_html=True)
             
         compute_button = st.sidebar.button('Submit')
 
         if compute_button:
             # Assuming `new_video_data` and `new_audio_data` are available
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
-            output_path = "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4"
+            current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
+            output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
             
             if with_audio:
-                preprocess_shorts(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
+                # preprocess_shorts(video_path, sorted_data, output_path)
+                make_clip_video(video_path, output_path, sorted_data)
             else:
-                preprocess_shorts_only_frame(video_path, sorted_data, "/Users/idaeho/Documents/GitHub/project_shorts/shorts.mp4")
+                preprocess_shorts_only_frame(video_path, sorted_data, output_path)
 
-            # Ensure the video file is fully written before trying to display it
-            time.sleep(4)  # Adding a short delay to ensure the file is written
+            time.sleep(1)
             
             # Check if the file exists
             if os.path.exists(output_path):
