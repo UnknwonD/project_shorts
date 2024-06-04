@@ -63,6 +63,7 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     
     if video_length == -1:
         video_length = int(min_length * ratio)
+        print(video_length)
     else:
         video_length = (video_length // 3) # 가장 큰 3초 단위로 정리
     
@@ -79,7 +80,7 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     
     sorted_data = sorted(output, key=lambda x: (x[1], x[2]), reverse=True)
     sorted_data = sorted(sorted_data[:video_length], key=lambda x: x[0])
-    
+    print(len(sorted_data))
     return sorted_data
 
 @st.cache_data
