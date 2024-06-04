@@ -178,6 +178,8 @@ if 'page' not in st.session_state:
     st.session_state.page = 'Main'
 if 'model_selection' not in st.session_state:
     st.session_state.model_selection = 'Video'
+if 'task_selection' not in  st.session_state:
+    st.session_state.task_selection = 'shorts'
 
 # Sidebar for navigation
 st.sidebar.title('Navigation')
@@ -210,50 +212,35 @@ if uploaded_file is not None:
     if st.session_state.page == 'Main':
         # Main Page
         ## 사용자가 직접 사용할 수 있는 사이트
-        values_and_indices1 = get_values_and_indices(new_video_data)
-        values_and_indices2 = get_values_and_indices(new_audio_data)
+        process = st.selectbox("Process", ['short form', 'compression', 'editing point'])
 
-        # Convert to DataFrame for easier plotting
-        data1 = pd.DataFrame(values_and_indices1, columns=['Block Num', 'Highlight Label', 'Score'])
-        data2 = pd.DataFrame(values_and_indices2, columns=['Block Num', 'Highlight Label', 'Score'])
+        if process == "short form":
+            # 가중치
+            video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
+            video_weight = 0.8
+            audio_weight = 0.5
+            threshold = 0.8
+        elif process == 'compression':
+            # 가중치
+            video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
+            video_weight = 0.75
+            audio_weight = 0.7
+            threshold = 0.5
+        else:
+            video_length = st.sidebar.slider('Video Length Ratio', 0.0, 1.0, 0.5)
+            video_weight = 0.75
+            audio_weight = 0.25
+            threshold = 0.7
 
-        # Layout with columns for better organization
-        col1, col2 = st.columns([2, 3])
+        compute_button = st.sidebar.button('Submit')
 
-        with col1:
-            st.header('Dataset Selection')
-            
-            # Sidebar for dataset selection
-            dataset = st.selectbox('Select Dataset', ['Video', 'Audio'])
-
-            # Select the appropriate dataset
-            if dataset == 'Video':
-                data = data1
-            else:
-                data = data2
-
-            # Filter data controls below the graph
-            unique_column_indices = data['Highlight Label'].unique()
-            selected_column_indices = st.multiselect('Select Column Index', unique_column_indices, default=unique_column_indices)
-
-        with col2:
-            st.header('Highlight Trends')
-
-            # Filter data based on selection
-            filtered_data = data[(data['Highlight Label'].isin(selected_column_indices))]
-
-            # Create Altair chart
-            chart = alt.Chart(filtered_data).mark_line(point=alt.OverlayMarkDef(color="red")).encode(
-                x='Block Num:Q',
-                y='Score:Q',
-                tooltip=['Block Num', 'Highlight Label', 'Score'],
-                color='Highlight Label:N'
-            ).properties(
-                title='Highlight Trends'
-            ).interactive()
-
-            # Display the chart in Streamlit
-            st.altair_chart(chart, use_container_width=True)
+    if compute_button:
+        # Assuming `new_video_data` and `new_audio_data` are available
+        sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
+        current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
+        output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
+        
+        preprocess_shorts_only_frame(video_path, sorted_data, output_path)
             
     elif st.session_state.page == 'Statistics':
         # Process both datasets
