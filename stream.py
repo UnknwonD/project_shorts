@@ -54,15 +54,17 @@ def compute_ensemble(video_data, audio_data, video_weight, audio_weight, thresho
     return ensemble_labels, ensemble_scores
 
 
-def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold, ratio):
+def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold, video_length, ratio=None):
     
     # Ensure both arrays have the same length by truncating to the shortest length
     min_length = min(video_data.shape[0], audio_data.shape[0])
     video_data = video_data[:min_length]
     audio_data = audio_data[:min_length]
     
-    # video_length = int(min_length * ratio)
-    video_length = (ratio // 3) # 가장 큰 3초 단위로 정리
+    if video_length == -1:
+        video_length = int(min_length * ratio)
+    else:
+        video_length = (video_length // 3) # 가장 큰 3초 단위로 정리
     
     # Compute ensemble scores
     ensemble_scores = (video_data * video_weight + audio_data * audio_weight) / (video_weight + audio_weight)
@@ -79,8 +81,6 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     sorted_data = sorted(sorted_data[:video_length], key=lambda x: x[0])
     
     return sorted_data
-
-
 
 @st.cache_data
 def make_clip_video(video_path, output_video, labels):
@@ -220,27 +220,30 @@ if uploaded_file is not None:
             video_weight = 0.8
             audio_weight = 0.5
             threshold = 0.8
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         elif process == 'compression':
             # 가중치
             video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
             video_weight = 0.75
             audio_weight = 0.7
             threshold = 0.5
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         else:
-            video_length = st.sidebar.slider('Video Length Ratio', 0.0, 1.0, 0.5)
+            video_length = -1
+            video_ratio = st.sidebar.slider('Video Length Ratio', 0.0, 1.0, 0.5)
             video_weight = 0.75
             audio_weight = 0.25
             threshold = 0.7
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length, video_ratio)
 
         compute_button = st.sidebar.button('Submit')
 
-    if compute_button:
-        # Assuming `new_video_data` and `new_audio_data` are available
-        sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
-        current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
-        output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
-        
-        preprocess_shorts_only_frame(video_path, sorted_data, output_path)
+        if compute_button:
+            # Assuming `new_video_data` and `new_audio_data` are available
+            current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
+            output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
+            
+            preprocess_shorts_only_frame(video_path, sorted_data, output_path)
             
     elif st.session_state.page == 'Statistics':
         # Process both datasets
@@ -375,7 +378,8 @@ if uploaded_file is not None:
         audio_weight = st.sidebar.slider('Audio Model Weight', 0.0, 1.0, 0.5)
         threshold = st.sidebar.slider('Threshold for Label 2', 0.0, 1.0, 0.5)
         video_length = st.sidebar.number_input("Video Length Ratio", min_value=3, step = 3)
-        with_audio  = st.sidebar.checkbox("Preceed Video with Audio")
+        # with_audio  = st.sidebar.checkbox("Preceed Video with Audio")
+        with_audio = False
         
         if with_audio:
             st.markdown("<span style='color:red;'>Warning :: It will Takes a Long Time !!</span>", unsafe_allow_html=True)
