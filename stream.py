@@ -54,10 +54,15 @@ def compute_ensemble(video_data, audio_data, video_weight, audio_weight, thresho
     return ensemble_labels, ensemble_scores
 
 
-def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold, video_length, ratio=None):
+def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weight, threshold, video_length, ratio=None, outro_length=0):
     
     # Ensure both arrays have the same length by truncating to the shortest length
-    min_length = min(video_data.shape[0], audio_data.shape[0])
+    if outro_length != 0:
+        outro = outro_length // 3
+        min_length = min(video_data.shape[0], audio_data.shape[0]) - outro
+    else:
+        min_length = min(video_data.shape[0], audio_data.shape[0])
+        
     video_data = video_data[:min_length]
     audio_data = audio_data[:min_length]
     
@@ -83,7 +88,6 @@ def get_max_values_and_indices(video_data, audio_data, video_weight, audio_weigh
     print(len(sorted_data))
     return sorted_data
 
-@st.cache_data
 def make_clip_video(video_path, output_video, labels):
     # Load the video
     video = VideoFileClip(video_path)
@@ -126,7 +130,10 @@ def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str)
     total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
     sequences = []
 
-    for lbl in label:
+    total_labels = len(label)
+    progress_bar = st.progress(0)
+    
+    for idx, lbl in enumerate(label):
         index = lbl[0]
         start_frame = float(index * interval)
         
@@ -153,11 +160,14 @@ def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str)
         
         if len(frames) == interval:
             sequences.extend(frames)
-    
+        
+        # Update progress bar
+        progress_bar.progress((idx + 1) / total_labels)
+
     if sequences:
         height, width, layers = sequences[0].shape
         size = (width, height)
-        out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, size)
+        out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'X264'), fps, size)
 
         for frame in sequences:
             out.write(frame)
@@ -217,37 +227,50 @@ if uploaded_file is not None:
 
         if process == "short form":
             # 가중치
+            video_ratio = 0
             video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
             video_weight = 0.80
             audio_weight = 0.36
             threshold = 0.50
-            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         elif process == 'compression':
+            video_ratio = 0
             # 가중치
             video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
             video_weight = 0.64
             audio_weight = 0.82
             threshold = 0.83
-            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         else:
             video_length = -1
             video_ratio = st.sidebar.slider('Video Length Ratio', 0.0, 1.0, 0.5)
             video_weight = 0.70
             audio_weight = 0.82
             threshold = 0.7
-            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length, video_ratio)
 
+
+        is_outro = st.sidebar.checkbox("Outro")
+        outro_length = 0
+        if is_outro:
+            outro_length = st.sidebar.number_input("Outro Length", 0, step=3, value=21) # 팡이요 영상 기준 아웃트로 21초
+            outro_length = int(outro_length)
         compute_button = st.sidebar.button('Submit')
 
         if compute_button:
-            # Assuming `new_video_data` and `new_audio_data` are available
+            sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length, video_ratio, outro_length)
+            
             current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
             output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
             
             preprocess_shorts_only_frame(video_path, sorted_data, output_path)
             
-            video_file = open(output_path)
-            st.video(video_file)
+            # Check if the video file exists
+            if os.path.exists(output_path):
+                st.success(f"Video created successfully: {output_path}")
+                
+                # Use a relative path if necessary
+                relative_path = os.path.relpath(output_path, start=os.getcwd())
+                st.video(relative_path)
+            else:
+                st.error("Video creation failed. The file does not exist.")
             
     elif st.session_state.page == 'Statistics':
         # Process both datasets
