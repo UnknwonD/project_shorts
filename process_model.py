@@ -1,8 +1,11 @@
 import os
 import cv2
 import numpy as np
-os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
-os.environ['FFMPEG_BINARY'] = "/opt/homebrew/bin/ffmpeg"
+import platform
+
+if platform.system() == "Darwin":
+    os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
+    os.environ['FFMPEG_BINARY'] = "/opt/homebrew/bin/ffmpeg"
 
 import threading
 import queue

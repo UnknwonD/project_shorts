@@ -5,6 +5,7 @@ import altair as alt
 import tempfile
 import base64
 import time
+import platform
 from datetime import datetime
 import cv2
 import os
@@ -258,7 +259,11 @@ if uploaded_file is not None:
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length, video_ratio, outro_length)
             
             current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
-            output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
+            
+            if platform.system() == "Windows":
+                output_path = os.path.join("C:/Users/daeho/OneDrive/문서/GitHub/project_shorts/output_videos", current_time)
+            elif platform.system() == "Darwin":
+                output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
             
             preprocess_shorts_only_frame(video_path, sorted_data, output_path)
             
@@ -417,7 +422,11 @@ if uploaded_file is not None:
             # Assuming `new_video_data` and `new_audio_data` are available
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
             current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
-            output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
+            
+            if platform.system() == "Windows":
+                output_path = os.path.join("C:/Users/daeho/OneDrive/문서/GitHub/project_shorts/output_videos", current_time)
+            elif platform.system() == "Darwin":
+                output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
             
             if with_audio:
                 # preprocess_shorts(video_path, sorted_data, output_path)
