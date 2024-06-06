@@ -168,7 +168,10 @@ def preprocess_shorts_only_frame(video_path: str, label: list, output_path: str)
     if sequences:
         height, width, layers = sequences[0].shape
         size = (width, height)
-        out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'X264'), fps, size)
+        if platform.system() == "Windows":
+            out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, size)
+        elif platform.system() == "Darwin":
+            out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'X264'), fps, size)
 
         for frame in sequences:
             out.write(frame)
@@ -422,7 +425,7 @@ if uploaded_file is not None:
             # Assuming `new_video_data` and `new_audio_data` are available
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
             current_time = str(datetime.now().strftime("%Y%m%d_%H%M%S")) + ".mp4"
-            
+
             if platform.system() == "Windows":
                 output_path = os.path.join("C:/Users/daeho/OneDrive/문서/GitHub/project_shorts/output_videos", current_time)
             elif platform.system() == "Darwin":
