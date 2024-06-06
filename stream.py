@@ -218,22 +218,22 @@ if uploaded_file is not None:
         if process == "short form":
             # 가중치
             video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
-            video_weight = 0.8
-            audio_weight = 0.5
-            threshold = 0.8
+            video_weight = 0.80
+            audio_weight = 0.36
+            threshold = 0.50
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         elif process == 'compression':
             # 가중치
             video_length = st.sidebar.number_input("Video Length", min_value=3, step = 3)
-            video_weight = 0.75
-            audio_weight = 0.7
-            threshold = 0.5
+            video_weight = 0.64
+            audio_weight = 0.82
+            threshold = 0.83
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length)
         else:
             video_length = -1
             video_ratio = st.sidebar.slider('Video Length Ratio', 0.0, 1.0, 0.5)
-            video_weight = 0.75
-            audio_weight = 0.25
+            video_weight = 0.70
+            audio_weight = 0.82
             threshold = 0.7
             sorted_data = get_max_values_and_indices(new_video_data, new_audio_data, video_weight, audio_weight, threshold, video_length, video_ratio)
 
@@ -245,6 +245,9 @@ if uploaded_file is not None:
             output_path = os.path.join("/Users/idaeho/Documents/GitHub/project_shorts/", current_time)
             
             preprocess_shorts_only_frame(video_path, sorted_data, output_path)
+            
+            video_file = open(output_path)
+            st.video(video_file)
             
     elif st.session_state.page == 'Statistics':
         # Process both datasets
