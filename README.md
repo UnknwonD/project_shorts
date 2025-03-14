@@ -18,11 +18,12 @@ streamlit run stream.py
 
 
 # 주요 파일 설명
-
+- **/Pipeline**: 데이터 전처리 관련 코드 모음집 입니다.
+</br>
 - **stream.py**: Streamlit 애플리케이션의 메인 파일입니다.
+- **st.ipynb**: 프로세스를 하나로 연결한 테스트 코드입니다.
 - **process.py**: 동영상 처리와 관련된 함수들을 포함하고 있습니다.
-- **VASNET.py**: 비디오 요약을 위한 VASNet 모델 구현이 포함되어 있습니다.
-- **requirements.txt**: 프로젝트에 필요한 Python 패키지 목록이 포함되어 있습니다.
+- **requirements.txt**: 프로젝트에 필요한 라이브러리 목록이 포함되어 있습니다.
 
 # 참고 사항
 
